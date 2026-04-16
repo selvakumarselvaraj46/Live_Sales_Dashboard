@@ -3,73 +3,57 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-from streamlit_autorefresh import st_autorefresh
 import requests
+from streamlit_autorefresh import st_autorefresh
 
 # -----------------------------
 # CONFIG
 # -----------------------------
-st.set_page_config(page_title="Enterprise Revenue Intelligence", layout="wide")
+st.set_page_config(
+    page_title="Enterprise Revenue Control Room",
+    layout="wide",
+    page_icon="📊"
+)
 
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
-    background-color: #1e1e1e;
-    color: #f5f5f5;
+    background: #0f1117;
+    color: #e6e6e6;
 }
 [data-testid="stHeader"] {
     background: rgba(0,0,0,0);
 }
+.block {
+    background: #161a25;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #2a2f3a;
+}
 </style>
 """, unsafe_allow_html=True)
-
-REFRESH_MS = 5000
-MAX_ROWS = 300
-
-# -----------------------------
-# LOGIN SYSTEM
-# -----------------------------
-USERS = {"admin": "admin123", "viewer": "viewer123"}
-
-if "auth" not in st.session_state:
-    st.session_state.auth = None
-
-if not st.session_state.auth:
-    st.title("🔐 Enterprise Login")
-
-    u = st.text_input("Username")
-    p = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        if u in USERS and USERS[u] == p:
-            st.session_state.auth = u
-            st.rerun()
-        else:
-            st.error("Invalid login")
-    st.stop()
-
-ROLE = "admin" if st.session_state.auth == "admin" else "viewer"
-st.sidebar.success(f"{st.session_state.auth} ({ROLE})")
 
 # -----------------------------
 # AUTO REFRESH
 # -----------------------------
-st_autorefresh(interval=REFRESH_MS, key="live")
+st_autorefresh(interval=5000, key="live")
 
 # -----------------------------
-# PROFESSIONAL PRODUCT DATASET (NEW)
+# DATASET (10+ PREMIUM PRODUCTS)
 # -----------------------------
 PRODUCTS = {
     "Apple MacBook Pro": [120000, 180000, 220000],
     "iPhone 15 Pro": [90000, 120000, 150000],
     "Samsung Galaxy S24": [80000, 100000, 130000],
     "Dell XPS Laptop": [95000, 140000, 170000],
-    "LG Smart TV 55”": [60000, 85000, 120000],
+    "LG OLED TV": [60000, 85000, 120000],
     "Sony WH-1000XM5": [25000, 30000, 40000],
-    "HP Pavilion Laptop": [55000, 75000, 90000],
+    "HP Pavilion": [55000, 75000, 90000],
     "Lenovo ThinkPad X1": [110000, 150000, 190000],
-    "Whirlpool AC 1.5T": [35000, 50000, 70000],
+    "Whirlpool AC": [35000, 50000, 70000],
     "Bosch Washing Machine": [30000, 45000, 65000],
+    "Canon DSLR": [50000, 80000, 120000],
+    "Boat Speaker": [3000, 6000, 12000],
 }
 
 CITIES = ["Chennai", "Mumbai", "Bangalore", "Delhi", "Hyderabad", "Pune"]
@@ -92,7 +76,11 @@ def get_weather(city):
         lat, lon = CITY_COORDS[city]
         r = requests.get(
             "https://api.open-meteo.com/v1/forecast",
-            params={"latitude": lat, "longitude": lon, "current": "temperature_2m,weather_code"},
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "current": "temperature_2m,weather_code"
+            },
             timeout=5
         )
         data = r.json()["current"]
@@ -129,8 +117,8 @@ def add_sale():
     new = pd.DataFrame([generate_sale()])
     st.session_state.df = pd.concat([st.session_state.df, new], ignore_index=True)
 
-    if len(st.session_state.df) > MAX_ROWS:
-        st.session_state.df = st.session_state.df.tail(MAX_ROWS)
+    if len(st.session_state.df) > 400:
+        st.session_state.df = st.session_state.df.tail(400)
 
 add_sale()
 
@@ -141,58 +129,77 @@ df["year"] = df["time"].dt.year
 weather = pd.DataFrame([get_weather(c) for c in CITIES])
 
 # -----------------------------
-# HEADER
+# FILTERS (HIGH CONFIG)
 # -----------------------------
-st.title("📊 Enterprise Revenue Intelligence (Control Room View)")
-st.caption(f"Last Updated: {datetime.now().strftime('%H:%M:%S')}")
+st.title("📊 Enterprise Control Room – Revenue Intelligence")
+
+st.sidebar.header("🎛️ Advanced Filters")
+
+city_f = st.sidebar.multiselect("Cities", CITIES, default=CITIES)
+product_f = st.sidebar.multiselect("Products", list(PRODUCTS.keys()), default=list(PRODUCTS.keys()))
+year_f = st.sidebar.multiselect("Year", sorted(df["year"].unique()), default=list(df["year"].unique()))
+weather_f = st.sidebar.multiselect("Weather", ["Heat", "Rain", "Normal", "Unknown"], default=["Heat","Rain","Normal","Unknown"])
 
 # -----------------------------
-# METRICS
+# APPLY FILTERS
 # -----------------------------
-col1, col2, col3 = st.columns(3)
+df = df[
+    (df["city"].isin(city_f)) &
+    (df["product"].isin(product_f)) &
+    (df["year"].isin(year_f))
+]
 
-col1.metric("💰 Revenue", f"₹{df['price'].sum():,.0f}")
-col2.metric("📦 Orders", len(df))
-col3.metric("📊 Avg Order", f"₹{df['price'].mean():,.0f}" if len(df) else "₹0")
+merged = df.merge(weather, on="city", how="left")
+merged = merged[merged["impact"].isin(weather_f)]
 
 # -----------------------------
-# CITY PERFORMANCE
+# KPI CARDS
 # -----------------------------
-st.subheader("🏙️ City Performance")
+col1, col2, col3, col4 = st.columns(4)
 
-city_df = df.groupby("city", as_index=False)["price"].sum().sort_values("price", ascending=False)
+col1.metric("💰 Revenue", f"₹{merged['price'].sum():,.0f}")
+col2.metric("📦 Orders", len(merged))
+col3.metric("📊 Avg Order", f"₹{merged['price'].mean():,.0f}" if len(merged) else "₹0")
+col4.metric("🏙️ Active Cities", merged["city"].nunique())
 
-fig1 = px.bar(city_df, x="city", y="price", text="price", color="price")
+st.markdown("---")
+
+# -----------------------------
+# VISUAL 1 - CITY PERFORMANCE
+# -----------------------------
+st.subheader("🏙️ City Intelligence Matrix")
+
+city_df = merged.groupby("city", as_index=False)["price"].sum().sort_values("price", ascending=False)
+
+fig1 = px.bar(city_df, x="city", y="price", color="price", text="price")
 st.plotly_chart(fig1, use_container_width=True)
 
 # -----------------------------
-# PRODUCT PERFORMANCE
+# VISUAL 2 - PRODUCT PERFORMANCE
 # -----------------------------
-st.subheader("📦 Enterprise Product Performance (Top Devices)")
+st.subheader("📦 Product Revenue Engine")
 
-prod_df = df.groupby("product", as_index=False)["price"].sum().sort_values("price", ascending=False)
+prod_df = merged.groupby("product", as_index=False)["price"].sum().sort_values("price", ascending=False)
 
-fig2 = px.bar(prod_df, x="product", y="price", text="price", color="price")
+fig2 = px.bar(prod_df, x="product", y="price", color="price", text="price")
 st.plotly_chart(fig2, use_container_width=True)
 
 # -----------------------------
-# WEATHER IMPACT
+# VISUAL 3 - WEATHER IMPACT
 # -----------------------------
-st.subheader("🌦️ Weather Impact Analysis")
-
-merged = df.merge(weather, on="city", how="left")
+st.subheader("🌦️ Weather Intelligence Layer")
 
 weather_df = merged.groupby("impact", as_index=False)["price"].sum()
 
-fig3 = px.pie(weather_df, names="impact", values="price", hole=0.5)
+fig3 = px.pie(weather_df, names="impact", values="price", hole=0.55)
 st.plotly_chart(fig3, use_container_width=True)
 
 # -----------------------------
-# TREND
+# VISUAL 4 - TREND ENGINE
 # -----------------------------
-st.subheader("📈 Revenue Trend")
+st.subheader("📈 Real-Time Revenue Stream")
 
-trend = df.set_index("time").resample("1min")["price"].sum().reset_index()
+trend = merged.set_index("time").resample("1min")["price"].sum().reset_index()
 
 fig4 = px.line(trend, x="time", y="price", markers=True)
 st.plotly_chart(fig4, use_container_width=True)
@@ -203,7 +210,7 @@ st.plotly_chart(fig4, use_container_width=True)
 st.subheader("🛰️ Live Transaction Feed")
 
 st.dataframe(
-    df.sort_values("time", ascending=False).head(15),
+    merged.sort_values("time", ascending=False).head(20),
     use_container_width=True,
     hide_index=True
 )
@@ -211,4 +218,4 @@ st.dataframe(
 # -----------------------------
 # FOOTER
 # -----------------------------
-st.caption("⚡ Enterprise Control Room: Dark Mode + Premium Products + Real-time Analytics")
+st.caption("⚡ Enterprise Grade Dashboard: Filters + Weather AI + Product Intelligence + Live Stream (5s)")
