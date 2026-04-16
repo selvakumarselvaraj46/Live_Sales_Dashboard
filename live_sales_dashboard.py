@@ -60,20 +60,11 @@ CITIES = [
 "Delhi","Pune","Kolkata","Ahmedabad"
 ]
 
-WEATHER_TYPES = ["Rain", "Heat", "Normal"]
-
 PRICE_RANGE = {
 "Mobile":[12000,90000],
 "Laptop":[40000,150000],
 "Accessories":[1000,15000]
 }
-
-# -----------------------------
-# WEATHER SIMULATION
-# -----------------------------
-
-def get_weather():
-    return {city: random.choice(WEATHER_TYPES) for city in CITIES}
 
 # -----------------------------
 # HISTORICAL DATA
@@ -111,9 +102,6 @@ def generate_data():
 if "sales" not in st.session_state:
     st.session_state.sales=generate_data()
 
-if "weather" not in st.session_state:
-    st.session_state.weather = get_weather()
-
 # -----------------------------
 # LIVE SALES
 # -----------------------------
@@ -143,9 +131,6 @@ st.session_state.sales = pd.concat(
 
 df = st.session_state.sales.copy()
 
-# Attach weather
-df["weather"] = df["city"].map(st.session_state.weather)
-
 df["year"]=df.timestamp.dt.year
 df["month"]=df.timestamp.dt.month_name()
 
@@ -169,7 +154,6 @@ brand=st.sidebar.multiselect(
     default=df[df["category"].isin(category)]["brand"].unique()
 )
 
-# ✅ NEW PRODUCT (MODEL) FILTER (DYNAMIC)
 model=st.sidebar.multiselect(
     "Product (Model)",
     df[
@@ -186,19 +170,12 @@ city=st.sidebar.multiselect(
     "City",df.city.unique(),default=df.city.unique()
 )
 
-weather=st.sidebar.multiselect(
-    "Weather",
-    df.weather.unique(),
-    default=df.weather.unique()
-)
-
 filtered=df[
     (df.year.isin(year))&
     (df.category.isin(category))&
     (df.brand.isin(brand))&
-    (df.model.isin(model))&   # ✅ applied here
-    (df.city.isin(city))&
-    (df.weather.isin(weather))
+    (df.model.isin(model))&
+    (df.city.isin(city))
 ].copy()
 
 # -----------------------------
@@ -220,26 +197,6 @@ col4.metric("Profit",f"₹{filtered.profit.sum():,.0f}")
 
 growth=filtered.groupby("year")["price"].sum().pct_change().mean()*100
 col5.metric("YoY Growth",f"{growth:.1f}%")
-
-# -----------------------------
-# WEATHER IMPACT
-# -----------------------------
-
-st.subheader("🌦 Weather Impact on Sales")
-
-weather_sales = filtered.groupby("weather")["price"].sum().reset_index()
-
-fig = px.bar(weather_sales, x="weather", y="price")
-st.plotly_chart(fig, use_container_width=True)
-
-st.write("### Current Weather by City")
-
-weather_df = pd.DataFrame(
-    list(st.session_state.weather.items()),
-    columns=["City","Weather"]
-)
-
-st.dataframe(weather_df)
 
 # -----------------------------
 # AI FORECAST
