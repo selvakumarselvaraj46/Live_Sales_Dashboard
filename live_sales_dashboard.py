@@ -346,4 +346,4 @@ live=filtered.sort_values(
 ).head(20)
 
 st.dataframe(live)
- i no need weather remove the weather in above code and give me full code in single block code
+
