@@ -1,208 +1,147 @@
 import random
 from datetime import datetime, timedelta
-
 import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import requests
 import streamlit as st
+import plotly.express as px
 from streamlit_autorefresh import st_autorefresh
 
 # -----------------------------
 # CONFIG
 # -----------------------------
-st.set_page_config(page_title="AI Human Revenue Command Center", layout="wide")
+st.set_page_config(page_title="Live Secure Revenue Pulse", layout="wide")
 
 REFRESH_MS = 5000
-SALE_INTERVAL_SECONDS = 20
-MAX_ROWS = 800
-
-st_autorefresh(interval=REFRESH_MS, key="auto_refresh")
+MAX_ROWS = 300
 
 # -----------------------------
-# DATA MODELS
+# ROLE SYSTEM (SIMPLIFIED)
 # -----------------------------
-PRODUCTS = {
-    "Laptop": [45000, 65000, 85000],
-    "Phone": [12000, 18000, 25000],
-    "Tablet": [15000, 22000, 30000],
-    "Headphones": [2000, 3500, 5000],
-    "Smartwatch": [3000, 6000, 9000],
-    "Speakers": [4500, 6000, 7500],
+USERS = {
+    "admin": "admin123",
+    "viewer": "viewer123"
 }
 
-CITIES = ["Chennai", "Bengaluru", "Mumbai", "Delhi", "Hyderabad", "Pune"]
+if "auth" not in st.session_state:
+    st.session_state.auth = None
 
 # -----------------------------
-# SESSION STATE
+# LOGIN
+# -----------------------------
+if not st.session_state.auth:
+    st.title("🔐 Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if username in USERS and USERS[username] == password:
+            st.session_state.auth = username
+            st.success("Login successful")
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+    st.stop()
+
+ROLE = "admin" if st.session_state.auth == "admin" else "viewer"
+
+st.sidebar.success(f"Logged in as: {st.session_state.auth} ({ROLE})")
+
+# -----------------------------
+# AUTO REFRESH (5 seconds)
+# -----------------------------
+st_autorefresh(interval=REFRESH_MS, key="live_refresh")
+
+# -----------------------------
+# SESSION DATA
 # -----------------------------
 if "df" not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["time", "product", "price", "city", "persona"])
+    st.session_state.df = pd.DataFrame(columns=["time", "product", "city", "price"])
 
-if "last_time" not in st.session_state:
-    st.session_state.last_time = datetime.now()
-
-# -----------------------------
-# HUMAN PERSONA ENGINE
-# -----------------------------
-def generate_persona():
-    personas = [
-        "Tech Buyer 🧑‍💻",
-        "Budget Shopper 💰",
-        "Premium Customer 👑",
-        "Student Buyer 🎓",
-        "Business Buyer 📊",
-        "Impulse Shopper ⚡"
-    ]
-    return random.choice(personas)
+PRODUCTS = ["Laptop", "Phone", "Tablet", "Watch"]
+CITIES = ["Chennai", "Mumbai", "Bangalore", "Delhi"]
 
 # -----------------------------
-# SALES GENERATOR (HUMAN SIMULATION)
+# GENERATE LIVE DATA SAFELY
 # -----------------------------
 def generate_sale():
-    product = random.choice(list(PRODUCTS.keys()))
-    price = random.choice(PRODUCTS[product]) + random.randint(-1000, 2000)
-    city = random.choice(CITIES)
     return {
         "time": datetime.now(),
-        "product": product,
-        "price": max(price, 500),
-        "city": city,
-        "persona": generate_persona()
+        "product": random.choice(PRODUCTS),
+        "city": random.choice(CITIES),
+        "price": random.randint(5000, 90000),
     }
 
-# -----------------------------
-# AUTO DATA APPEND
-# -----------------------------
-now = datetime.now()
-if (now - st.session_state.last_time).seconds >= SALE_INTERVAL_SECONDS:
-    new_data = pd.DataFrame([generate_sale()])
-    st.session_state.df = pd.concat([st.session_state.df, new_data], ignore_index=True)
-    st.session_state.last_time = now
+def add_sale():
+    new_row = pd.DataFrame([generate_sale()])
+    st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
 
-# limit rows
-st.session_state.df = st.session_state.df.tail(MAX_ROWS)
+    # memory control (important for security/stability)
+    if len(st.session_state.df) > MAX_ROWS:
+        st.session_state.df = st.session_state.df.tail(MAX_ROWS)
+
+# Add new data every refresh
+add_sale()
 
 df = st.session_state.df.copy()
-
-# -----------------------------
-# AI INSIGHTS ENGINE
-# -----------------------------
-def demand_index(city_df):
-    if len(city_df) == 0:
-        return 0
-    return round((city_df["price"].sum() / len(city_df)) / 1000, 2)
-
-def anomaly_detection(series):
-    if len(series) < 5:
-        return "Stable"
-    mean = np.mean(series)
-    last = series.iloc[-1]
-    if last > mean * 1.5:
-        return "🔥 Spike Detected"
-    elif last < mean * 0.5:
-        return "📉 Drop Detected"
-    return "Stable"
+df["time"] = pd.to_datetime(df["time"])
 
 # -----------------------------
 # UI HEADER
 # -----------------------------
-st.title("🤖 Human + AI Revenue Command Center")
-st.caption("Real-time Human behavior simulation + AI insights engine")
+st.title("📊 Live Revenue Command Center (5s Secure Stream)")
+
+st.caption(f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
 
 # -----------------------------
 # METRICS
 # -----------------------------
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 
-total_rev = df["price"].sum() if not df.empty else 0
-orders = len(df)
-avg_order = df["price"].mean() if not df.empty else 0
-last_city = df["city"].iloc[-1] if not df.empty else "None"
-
-with col1:
-    st.metric("💰 Revenue", f"₹{total_rev:,.0f}")
-with col2:
-    st.metric("🧾 Orders", orders)
-with col3:
-    st.metric("📦 Avg Order", f"₹{avg_order:,.0f}")
-with col4:
-    st.metric("📍 Last City", last_city)
+col1.metric("💰 Total Revenue", f"₹{df['price'].sum():,.0f}")
+col2.metric("📦 Orders", len(df))
+col3.metric("📊 Avg Order", f"₹{df['price'].mean():,.0f}" if len(df) else "₹0")
 
 # -----------------------------
-# CHART: CITY REVENUE
+# REVENUE BY CITY
 # -----------------------------
-st.subheader("🏙️ City Intelligence Layer")
+st.subheader("🏙️ Revenue by City")
 
-if not df.empty:
-    city_df = df.groupby("city", as_index=False)["price"].sum()
-    fig = px.bar(city_df, x="city", y="price", color="price", text="price")
-    st.plotly_chart(fig, use_container_width=True)
+city_df = df.groupby("city", as_index=False)["price"].sum()
 
-# -----------------------------
-# HUMAN BEHAVIOR VIEW
-# -----------------------------
-st.subheader("🧠 Human Behavior Simulation Feed")
+fig = px.bar(city_df, x="city", y="price", text="price")
+fig.update_traces(texttemplate="₹%{text:,.0f}", textposition="outside")
 
-if not df.empty:
-    show = df.tail(10).copy()
-    show["time"] = show["time"].dt.strftime("%H:%M:%S")
-    st.dataframe(show, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# AI DEMAND ENGINE
+# LIVE TREND (5 MIN WINDOW)
 # -----------------------------
-st.subheader("📊 AI Demand Intelligence")
+st.subheader("📈 Live Revenue Trend")
 
-if not df.empty:
-    demand_table = []
-    for city in df["city"].unique():
-        temp_df = df[df["city"] == city]
-        demand_table.append({
-            "City": city,
-            "Demand Index": demand_index(temp_df),
-            "Orders": len(temp_df),
-            "Revenue": temp_df["price"].sum()
-        })
+trend = df.set_index("time").resample("1min")["price"].sum().reset_index()
 
-    demand_df = pd.DataFrame(demand_table)
-    st.dataframe(demand_df, use_container_width=True)
+fig2 = px.line(trend, x="time", y="price", markers=True)
+st.plotly_chart(fig2, use_container_width=True)
 
 # -----------------------------
-# PRODUCT INTELLIGENCE
+# PRODUCT MIX
 # -----------------------------
-st.subheader("🛍️ Product Intelligence")
+st.subheader("🛍️ Product Mix")
 
-if not df.empty:
-    product_df = df.groupby("product", as_index=False)["price"].sum()
-    fig2 = px.pie(product_df, names="product", values="price", hole=0.5)
-    st.plotly_chart(fig2, use_container_width=True)
+pie = df.groupby("product", as_index=False)["price"].sum()
 
-# -----------------------------
-# ANOMALY DETECTION
-# -----------------------------
-st.subheader("⚡ AI Anomaly Detector")
-
-if not df.empty:
-    trend = df.groupby(pd.Grouper(key="time", freq="2min"))["price"].sum().reset_index()
-    status = anomaly_detection(trend["price"])
-    st.info(f"System Status: {status}")
+fig3 = px.pie(pie, names="product", values="price", hole=0.5)
+st.plotly_chart(fig3, use_container_width=True)
 
 # -----------------------------
-# WEATHERLESS SMART INSIGHT
+# LIVE TABLE
 # -----------------------------
-st.subheader("🧠 AI Recommendation Engine")
+st.subheader("🛰️ Live Feed")
 
-if not df.empty:
-    top_product = df.groupby("product")["price"].sum().idxmax()
-    top_city = df.groupby("city")["price"].sum().idxmax()
-
-    st.success(f"🔥 Best Product: {top_product}")
-    st.success(f"📍 Best City: {top_city}")
-    st.info("💡 Suggestion: Increase ads targeting high-demand city-product pair")
+show = df.sort_values("time", ascending=False).head(10)
+st.dataframe(show, use_container_width=True, hide_index=True)
 
 # -----------------------------
-# FOOTER
+# SECURITY NOTE
 # -----------------------------
-st.caption("⚡ Powered by Human Simulation AI + Streamlit Intelligence Engine")
+st.caption("🔐 Secure Mode: session-based auth + bounded memory + auto-refresh 5s")
