@@ -1,7 +1,6 @@
 import random
 from datetime import datetime, timedelta
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
@@ -9,38 +8,23 @@ from streamlit_autorefresh import st_autorefresh
 # -----------------------------
 # PAGE CONFIG
 # -----------------------------
+
 st.set_page_config(
     page_title="Enterprise Revenue Command Center",
     layout="wide",
     page_icon="📊"
 )
 
-# Light Theme
-st.markdown("""
-    <style>
-    .stApp {
-        background-color: #FFFFFF;
-        color: #000000;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 st.title("📊 Enterprise Revenue Command Center")
 
 st_autorefresh(interval=5000, key="refresh")
 
 # -----------------------------
-# SAFE LIST FUNCTION ✅
-# -----------------------------
-def ensure_list(x):
-    if isinstance(x, (list, tuple, set)):
-        return list(x)
-    return [x]
-
-# -----------------------------
 # PRODUCT DATABASE
 # -----------------------------
+
 PRODUCT_DB = {
+
 "Mobile":{
 "Apple":["iPhone 13","iPhone 14","iPhone 15","iPhone 15 Pro"],
 "Samsung":["S23","S24","A54","M34"],
@@ -53,6 +37,7 @@ PRODUCT_DB = {
 "Motorola":["Edge 40","G84","G54"],
 "Nothing":["Phone 1","Phone 2"]
 },
+
 "Laptop":{
 "Apple":["Macbook M1","Macbook M2"],
 "Dell":["Inspiron","XPS","G15"],
@@ -60,6 +45,7 @@ PRODUCT_DB = {
 "Lenovo":["Legion","Thinkpad","IdeaPad"],
 "Asus":["ROG","TUF","Vivobook"]
 },
+
 "Accessories":{
 "Boat":["Earbuds","Headphones"],
 "Noise":["Smartwatch","Earbuds"],
@@ -69,7 +55,12 @@ PRODUCT_DB = {
 }
 }
 
-CITIES = ["Chennai","Bangalore","Hyderabad","Mumbai","Delhi","Pune","Kolkata","Ahmedabad"]
+CITIES = [
+"Chennai","Bangalore","Hyderabad","Mumbai",
+"Delhi","Pune","Kolkata","Ahmedabad"
+]
+
+WEATHER_TYPES = ["Rain", "Heat", "Normal"]
 
 PRICE_RANGE = {
 "Mobile":[12000,90000],
@@ -78,8 +69,16 @@ PRICE_RANGE = {
 }
 
 # -----------------------------
+# WEATHER SIMULATION
+# -----------------------------
+
+def get_weather():
+    return {city: random.choice(WEATHER_TYPES) for city in CITIES}
+
+# -----------------------------
 # HISTORICAL DATA
 # -----------------------------
+
 def generate_data():
     rows=[]
     start=datetime(2023,1,1)
@@ -88,28 +87,45 @@ def generate_data():
         cat=random.choice(list(PRODUCT_DB.keys()))
         brand=random.choice(list(PRODUCT_DB[cat].keys()))
         model=random.choice(PRODUCT_DB[cat][brand])
-        price=random.randint(*PRICE_RANGE[cat])
+        price=random.randint(
+            PRICE_RANGE[cat][0],
+            PRICE_RANGE[cat][1]
+        )
         city=random.choice(CITIES)
 
-        rows.append([start,cat,brand,model,price,city])
+        rows.append([
+            start,cat,brand,model,price,city
+        ])
+
         start+=timedelta(hours=random.randint(3,12))
 
-    return pd.DataFrame(rows,columns=["timestamp","category","brand","model","price","city"])
+    return pd.DataFrame(
+        rows,
+        columns=["timestamp","category","brand","model","price","city"]
+    )
 
 # -----------------------------
 # SESSION STATE
 # -----------------------------
+
 if "sales" not in st.session_state:
-    st.session_state.sales = generate_data()
+    st.session_state.sales=generate_data()
+
+if "weather" not in st.session_state:
+    st.session_state.weather = get_weather()
 
 # -----------------------------
 # LIVE SALES
 # -----------------------------
+
 def live_sale():
     cat=random.choice(list(PRODUCT_DB.keys()))
     brand=random.choice(list(PRODUCT_DB[cat].keys()))
     model=random.choice(PRODUCT_DB[cat][brand])
-    price=random.randint(*PRICE_RANGE[cat])
+    price=random.randint(
+        PRICE_RANGE[cat][0],
+        PRICE_RANGE[cat][1]
+    )
     city=random.choice(CITIES)
 
     return {
@@ -122,11 +138,13 @@ def live_sale():
     }
 
 st.session_state.sales = pd.concat(
-    [st.session_state.sales, pd.DataFrame([live_sale()])],
-    ignore_index=True
+    [st.session_state.sales, pd.DataFrame([live_sale()])]
 )
 
 df = st.session_state.sales.copy()
+
+# Attach weather
+df["weather"] = df["city"].map(st.session_state.weather)
 
 df["year"]=df.timestamp.dt.year
 df["month"]=df.timestamp.dt.month_name()
@@ -134,10 +152,16 @@ df["month"]=df.timestamp.dt.month_name()
 # -----------------------------
 # FILTERS
 # -----------------------------
+
 st.sidebar.title("Filters")
 
-year=st.sidebar.multiselect("Year",sorted(df.year.unique()),default=sorted(df.year.unique()))
-category=st.sidebar.multiselect("Category",df.category.unique(),default=df.category.unique())
+year=st.sidebar.multiselect(
+    "Year",df.year.unique(),default=df.year.unique()
+)
+
+category=st.sidebar.multiselect(
+    "Category",df.category.unique(),default=df.category.unique()
+)
 
 brand=st.sidebar.multiselect(
     "Brand",
@@ -145,40 +169,48 @@ brand=st.sidebar.multiselect(
     default=df[df["category"].isin(category)]["brand"].unique()
 )
 
+# ✅ NEW PRODUCT (MODEL) FILTER (DYNAMIC)
 model=st.sidebar.multiselect(
-    "Model",
-    df[(df["category"].isin(category)) & (df["brand"].isin(brand))]["model"].unique(),
-    default=df[(df["category"].isin(category)) & (df["brand"].isin(brand))]["model"].unique()
+    "Product (Model)",
+    df[
+        (df["category"].isin(category)) &
+        (df["brand"].isin(brand))
+    ]["model"].unique(),
+    default=df[
+        (df["category"].isin(category)) &
+        (df["brand"].isin(brand))
+    ]["model"].unique()
 )
 
-city=st.sidebar.multiselect("City",df.city.unique(),default=df.city.unique())
+city=st.sidebar.multiselect(
+    "City",df.city.unique(),default=df.city.unique()
+)
 
-# ✅ FORCE SAFE LIST
-year = ensure_list(year)
-category = ensure_list(category)
-brand = ensure_list(brand)
-model = ensure_list(model)
-city = ensure_list(city)
+weather=st.sidebar.multiselect(
+    "Weather",
+    df.weather.unique(),
+    default=df.weather.unique()
+)
 
-# -----------------------------
-# FILTER DATA
-# -----------------------------
 filtered=df[
-    (df.year.isin(year)) &
-    (df.category.isin(category)) &
-    (df.brand.isin(brand)) &
-    (df.model.isin(model)) &
-    (df.city.isin(city))
+    (df.year.isin(year))&
+    (df.category.isin(category))&
+    (df.brand.isin(brand))&
+    (df.model.isin(model))&   # ✅ applied here
+    (df.city.isin(city))&
+    (df.weather.isin(weather))
 ].copy()
 
 # -----------------------------
 # PROFIT
 # -----------------------------
-filtered["profit"] = filtered["price"] * np.random.uniform(0.08,0.22,len(filtered))
+
+filtered["profit"]=filtered["price"]*random.uniform(0.08,0.22)
 
 # -----------------------------
 # KPI
 # -----------------------------
+
 col1,col2,col3,col4,col5=st.columns(5)
 
 col1.metric("Revenue",f"₹{filtered.price.sum():,.0f}")
@@ -190,80 +222,128 @@ growth=filtered.groupby("year")["price"].sum().pct_change().mean()*100
 col5.metric("YoY Growth",f"{growth:.1f}%")
 
 # -----------------------------
-# FORECAST
+# WEATHER IMPACT
 # -----------------------------
+
+st.subheader("🌦 Weather Impact on Sales")
+
+weather_sales = filtered.groupby("weather")["price"].sum().reset_index()
+
+fig = px.bar(weather_sales, x="weather", y="price")
+st.plotly_chart(fig, use_container_width=True)
+
+st.write("### Current Weather by City")
+
+weather_df = pd.DataFrame(
+    list(st.session_state.weather.items()),
+    columns=["City","Weather"]
+)
+
+st.dataframe(weather_df)
+
+# -----------------------------
+# AI FORECAST
+# -----------------------------
+
 st.subheader("AI Revenue Forecast")
 
 monthly=filtered.set_index("timestamp").resample("ME")["price"].sum()
+
 forecast=monthly.tail(3).mean()
 
 st.metric("Next Month Prediction",f"₹{forecast:,.0f}")
-st.plotly_chart(px.line(monthly),use_container_width=True)
+
+fig=px.line(monthly)
+st.plotly_chart(fig,use_container_width=True)
 
 # -----------------------------
 # YEAR TREND
 # -----------------------------
+
 st.subheader("Year Trend")
 
-year_df=filtered.groupby("year")["price"].sum().reset_index().sort_values("year")
-st.plotly_chart(px.bar(year_df,x="year",y="price",color="price"),use_container_width=True)
+year_df=filtered.groupby("year")["price"].sum().reset_index()
+
+fig=px.bar(year_df,x="year",y="price")
+st.plotly_chart(fig,use_container_width=True)
 
 # -----------------------------
-# CATEGORY + BRAND
+# CATEGORY
 # -----------------------------
+
 col1,col2=st.columns(2)
 
 with col1:
-    st.plotly_chart(px.pie(filtered.groupby("category")["price"].sum().reset_index(),
-                           names="category",values="price"),use_container_width=True)
+    cat=filtered.groupby("category")["price"].sum().reset_index()
+    fig=px.pie(cat,names="category",values="price")
+    st.plotly_chart(fig,use_container_width=True)
 
 with col2:
-    st.plotly_chart(px.bar(filtered.groupby("brand")["price"].sum().reset_index(),
-                           x="brand",y="price"),use_container_width=True)
+    brand_df=filtered.groupby("brand")["price"].sum().reset_index()
+    fig=px.bar(brand_df,x="brand",y="price")
+    st.plotly_chart(fig,use_container_width=True)
 
 # -----------------------------
 # INVENTORY
 # -----------------------------
+
 if "inventory" not in st.session_state:
     data=[]
     for cat in PRODUCT_DB:
-        for brand_ in PRODUCT_DB[cat]:
-            for m in PRODUCT_DB[cat][brand_]:
-                data.append([cat,brand_,m,random.randint(20,120)])
+        for brand in PRODUCT_DB[cat]:
+            for model_name in PRODUCT_DB[cat][brand]:
+                data.append([
+                    cat,brand,model_name,
+                    random.randint(20,120)
+                ])
 
-    st.session_state.inventory=pd.DataFrame(data,columns=["category","brand","model","stock"])
-
-inv_filtered = st.session_state.inventory[
-    (st.session_state.inventory["category"].isin(category)) &
-    (st.session_state.inventory["brand"].isin(brand)) &
-    (st.session_state.inventory["model"].isin(model))
-]
+    st.session_state.inventory=pd.DataFrame(
+        data,
+        columns=["category","brand","model","stock"]
+    )
 
 st.subheader("Inventory")
-st.dataframe(inv_filtered)
+st.dataframe(st.session_state.inventory)
 
 # -----------------------------
 # ALERTS
 # -----------------------------
+
 st.subheader("Alerts")
 
-if not inv_filtered[inv_filtered.stock<30].empty:
+low=st.session_state.inventory[
+    st.session_state.inventory.stock<30
+]
+
+if not low.empty:
     st.warning("Low Inventory")
 
-if filtered.tail(20)["price"].sum()>500000:
+recent=filtered.tail(20)["price"].sum()
+
+if recent>500000:
     st.success("Sales Spike Detected")
 
 # -----------------------------
-# TOP MODELS
+# MODEL LEADERBOARD
 # -----------------------------
+
 st.subheader("Top Models")
 
-top=filtered.groupby("model")["price"].sum().reset_index().sort_values("price",ascending=False).head(10)
+top=filtered.groupby("model")["price"].sum().reset_index()
+top=top.sort_values("price",ascending=False).head(10)
+
 st.dataframe(top)
 
 # -----------------------------
 # LIVE SALES
 # -----------------------------
+
 st.subheader("Live Sales")
 
-st.dataframe(filtered.sort_values("timestamp",ascending=False).head(20))
+live=filtered.sort_values(
+    "timestamp",
+    ascending=False
+).head(20)
+
+st.dataframe(live)
+ i no need weather remove the weather in above code and give me full code in single block code
