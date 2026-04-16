@@ -9,7 +9,7 @@ import requests
 # -----------------------------
 # CONFIG
 # -----------------------------
-st.set_page_config(page_title="Live Secure Revenue Pulse", layout="wide")
+st.set_page_config(page_title="Enterprise Revenue Intelligence", layout="wide")
 
 REFRESH_MS = 5000
 MAX_ROWS = 300
@@ -37,7 +37,6 @@ if not st.session_state.auth:
     st.stop()
 
 ROLE = "admin" if st.session_state.auth == "admin" else "viewer"
-
 st.sidebar.success(f"{st.session_state.auth} ({ROLE})")
 
 # -----------------------------
@@ -46,7 +45,7 @@ st.sidebar.success(f"{st.session_state.auth} ({ROLE})")
 st_autorefresh(interval=REFRESH_MS, key="live")
 
 # -----------------------------
-# ELECTRONICS + APPLIANCES DATASET (EXPANDED)
+# DATA
 # -----------------------------
 PRODUCTS = {
     "Laptop": [45000, 65000, 85000],
@@ -59,15 +58,10 @@ PRODUCTS = {
     "Washing Machine": [15000, 30000, 55000],
     "Microwave": [5000, 12000, 20000],
     "AC": [25000, 45000, 70000],
-    "Bluetooth Speaker": [1500, 4000, 8000],
-    "Camera DSLR": [35000, 50000, 90000],
 }
 
 CITIES = ["Chennai", "Mumbai", "Bangalore", "Delhi", "Hyderabad", "Pune"]
 
-# -----------------------------
-# WEATHER API (Open-Meteo)
-# -----------------------------
 CITY_COORDS = {
     "Chennai": (13.08, 80.27),
     "Mumbai": (19.07, 72.87),
@@ -81,13 +75,15 @@ CITY_COORDS = {
 def get_weather(city):
     try:
         lat, lon = CITY_COORDS[city]
-        url = "https://api.open-meteo.com/v1/forecast"
-        r = requests.get(url, params={
-            "latitude": lat,
-            "longitude": lon,
-            "current": "temperature_2m,weather_code"
-        }, timeout=5)
-
+        r = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "current": "temperature_2m,weather_code"
+            },
+            timeout=5
+        )
         data = r.json()["current"]
         temp = data["temperature_2m"]
         code = data["weather_code"]
@@ -100,7 +96,6 @@ def get_weather(city):
             impact = "Normal"
 
         return {"city": city, "temp": temp, "impact": impact}
-
     except:
         return {"city": city, "temp": None, "impact": "Unknown"}
 
@@ -132,75 +127,98 @@ add_sale()
 
 df = st.session_state.df.copy()
 df["time"] = pd.to_datetime(df["time"])
+df["year"] = df["time"].dt.year
 
 # -----------------------------
-# HEADER
+# WEATHER DATA
 # -----------------------------
-st.title("📊 Enterprise Live Revenue + Weather Intelligence")
+weather = pd.DataFrame([get_weather(c) for c in CITIES])
 
-st.caption(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
+# -----------------------------
+# FILTER PANEL
+# -----------------------------
+st.title("📊 Enterprise Revenue Intelligence Dashboard")
+
+st.sidebar.header("🎛️ Filters")
+
+city_filter = st.sidebar.multiselect("Cities", CITIES, default=CITIES)
+product_filter = st.sidebar.multiselect("Products", list(PRODUCTS.keys()), default=list(PRODUCTS.keys()))
+weather_filter = st.sidebar.multiselect("Weather Impact", ["Heat", "Rain", "Normal", "Unknown"], default=["Heat","Rain","Normal","Unknown"])
+year_filter = st.sidebar.multiselect("Year", sorted(df["year"].unique()), default=list(df["year"].unique()))
+
+# -----------------------------
+# APPLY FILTERS
+# -----------------------------
+df = df[
+    (df["city"].isin(city_filter)) &
+    (df["product"].isin(product_filter)) &
+    (df["year"].isin(year_filter))
+]
+
+merged = df.merge(weather, on="city", how="left")
+merged = merged[merged["impact"].isin(weather_filter)]
 
 # -----------------------------
 # METRICS
 # -----------------------------
 col1, col2, col3 = st.columns(3)
 
-col1.metric("💰 Revenue", f"₹{df['price'].sum():,.0f}")
-col2.metric("📦 Orders", len(df))
-col3.metric("📊 Avg Order", f"₹{df['price'].mean():,.0f}")
+col1.metric("💰 Revenue", f"₹{merged['price'].sum():,.0f}")
+col2.metric("📦 Orders", len(merged))
+col3.metric("📊 Avg Order", f"₹{merged['price'].mean():,.0f}" if len(merged) else "₹0")
 
 # -----------------------------
-# WEATHER PANEL
+# VISUAL 1: CITY REVENUE
 # -----------------------------
-st.subheader("🌦️ City Weather Intelligence")
+st.subheader("🏙️ City Performance")
 
-weather_data = [get_weather(c) for c in CITIES]
-wdf = pd.DataFrame(weather_data)
+city_df = merged.groupby("city", as_index=False)["price"].sum().sort_values("price", ascending=False)
 
-st.dataframe(wdf, use_container_width=True)
-
-# -----------------------------
-# REVENUE BY CITY
-# -----------------------------
-st.subheader("🏙️ Revenue by City")
-
-city_df = df.groupby("city", as_index=False)["price"].sum()
-
-fig = px.bar(city_df, x="city", y="price", text="price")
-st.plotly_chart(fig, use_container_width=True)
+fig1 = px.bar(city_df, x="city", y="price", text="price", color="price")
+st.plotly_chart(fig1, use_container_width=True)
 
 # -----------------------------
-# PRODUCT MIX
+# VISUAL 2: PRODUCT PERFORMANCE
 # -----------------------------
-st.subheader("⚡ Electronics & Appliances Mix")
+st.subheader("⚡ Product Performance")
 
-product_df = df.groupby("product", as_index=False)["price"].sum()
+prod_df = merged.groupby("product", as_index=False)["price"].sum().sort_values("price", ascending=False)
 
-fig2 = px.pie(product_df, names="product", values="price", hole=0.5)
+fig2 = px.bar(prod_df, x="product", y="price", text="price", color="price")
 st.plotly_chart(fig2, use_container_width=True)
 
 # -----------------------------
-# WEATHER IMPACT INSIGHT
+# VISUAL 3: WEATHER IMPACT
 # -----------------------------
-st.subheader("📡 Weather Impact Insight")
+st.subheader("🌦️ Weather Impact Analysis")
 
-merged = df.merge(wdf, on="city", how="left")
+weather_df = merged.groupby("impact", as_index=False)["price"].sum()
 
-impact_summary = merged.groupby("impact", as_index=False)["price"].sum()
-
-fig3 = px.bar(impact_summary, x="impact", y="price", text="price")
+fig3 = px.pie(weather_df, names="impact", values="price", hole=0.5)
 st.plotly_chart(fig3, use_container_width=True)
 
 # -----------------------------
-# LIVE FEED
+# VISUAL 4: TIME TREND
 # -----------------------------
-st.subheader("🛰️ Live Sales Feed")
+st.subheader("📈 Revenue Trend")
 
-st.dataframe(df.sort_values("time", ascending=False).head(10),
-             use_container_width=True,
-             hide_index=True)
+trend = merged.set_index("time").resample("1min")["price"].sum().reset_index()
+
+fig4 = px.line(trend, x="time", y="price", markers=True)
+st.plotly_chart(fig4, use_container_width=True)
+
+# -----------------------------
+# DATA TABLE
+# -----------------------------
+st.subheader("🛰️ Filtered Live Data")
+
+st.dataframe(
+    merged.sort_values("time", ascending=False).head(15),
+    use_container_width=True,
+    hide_index=True
+)
 
 # -----------------------------
 # FOOTER
 # -----------------------------
-st.caption("⚡ Enterprise Mode: Weather + Electronics + Live Stream + Secure Auth")
+st.caption("⚡ Enterprise Dashboard: Filters + Weather + Products + Real-time Analytics")
