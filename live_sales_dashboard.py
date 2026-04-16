@@ -1,292 +1,208 @@
 import random
 from datetime import datetime, timedelta
+
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+import requests
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 # -----------------------------
-# PAGE CONFIG
+# CONFIG
 # -----------------------------
-st.set_page_config(
-    page_title="Enterprise Revenue Command Center",
-    layout="wide",
-    page_icon="📊"
-)
+st.set_page_config(page_title="AI Human Revenue Command Center", layout="wide")
 
-st.title("📊 Enterprise Revenue Command Center")
+REFRESH_MS = 5000
+SALE_INTERVAL_SECONDS = 20
+MAX_ROWS = 800
 
-st_autorefresh(interval=5000, key="refresh")
+st_autorefresh(interval=REFRESH_MS, key="auto_refresh")
 
 # -----------------------------
-# PRODUCT DATABASE
+# DATA MODELS
 # -----------------------------
-PRODUCT_DB = {
-
-"Mobile":{
-"Apple":["iPhone 13","iPhone 14","iPhone 15","iPhone 15 Pro"],
-"Samsung":["S23","S24","A54","M34"],
-"OnePlus":["11R","12","Nord CE3"],
-"Xiaomi":["Redmi Note 13","Mi 13","Poco F5"],
-"Realme":["Narzo 60","GT Neo","Realme 11"],
-"Oppo":["F21","Reno 10","A78"],
-"Vivo":["V27","Y100","X90"],
-"Google":["Pixel 7","Pixel 8"],
-"Motorola":["Edge 40","G84","G54"],
-"Nothing":["Phone 1","Phone 2"]
-},
-
-"Laptop":{
-"Apple":["Macbook M1","Macbook M2"],
-"Dell":["Inspiron","XPS","G15"],
-"HP":["Victus","Omen","Pavilion"],
-"Lenovo":["Legion","Thinkpad","IdeaPad"],
-"Asus":["ROG","TUF","Vivobook"]
-},
-
-"Accessories":{
-"Boat":["Earbuds","Headphones"],
-"Noise":["Smartwatch","Earbuds"],
-"Sony":["Headphones","Speaker"],
-"JBL":["Speaker","Earbuds"],
-"Firebolt":["Smartwatch"]
-}
+PRODUCTS = {
+    "Laptop": [45000, 65000, 85000],
+    "Phone": [12000, 18000, 25000],
+    "Tablet": [15000, 22000, 30000],
+    "Headphones": [2000, 3500, 5000],
+    "Smartwatch": [3000, 6000, 9000],
+    "Speakers": [4500, 6000, 7500],
 }
 
-CITIES = [
-"Chennai","Bangalore","Hyderabad","Mumbai",
-"Delhi","Pune","Kolkata","Ahmedabad"
-]
-
-WEATHER_TYPES = ["Rain", "Heat", "Normal"]
-
-PRICE_RANGE = {
-"Mobile":[12000,90000],
-"Laptop":[40000,150000],
-"Accessories":[1000,15000]
-}
+CITIES = ["Chennai", "Bengaluru", "Mumbai", "Delhi", "Hyderabad", "Pune"]
 
 # -----------------------------
-# WEATHER
+# SESSION STATE
 # -----------------------------
-def get_weather():
-    return {city: random.choice(WEATHER_TYPES) for city in CITIES}
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame(columns=["time", "product", "price", "city", "persona"])
 
-# -----------------------------
-# DATA GENERATION
-# -----------------------------
-def generate_data():
-    rows=[]
-    start=datetime(2022,1,1)  # 👈 start from 2022
-
-    while start < datetime.now():
-        cat=random.choice(list(PRODUCT_DB.keys()))
-        brand=random.choice(list(PRODUCT_DB[cat].keys()))
-        model=random.choice(PRODUCT_DB[cat][brand])
-        price=random.randint(*PRICE_RANGE[cat])
-        city=random.choice(CITIES)
-
-        rows.append([start,cat,brand,model,price,city])
-        start+=timedelta(hours=random.randint(3,12))
-
-    return pd.DataFrame(
-        rows,
-        columns=["timestamp","category","brand","model","price","city"]
-    )
+if "last_time" not in st.session_state:
+    st.session_state.last_time = datetime.now()
 
 # -----------------------------
-# SESSION
+# HUMAN PERSONA ENGINE
 # -----------------------------
-if "sales" not in st.session_state:
-    st.session_state.sales=generate_data()
-
-if "weather" not in st.session_state:
-    st.session_state.weather = get_weather()
+def generate_persona():
+    personas = [
+        "Tech Buyer 🧑‍💻",
+        "Budget Shopper 💰",
+        "Premium Customer 👑",
+        "Student Buyer 🎓",
+        "Business Buyer 📊",
+        "Impulse Shopper ⚡"
+    ]
+    return random.choice(personas)
 
 # -----------------------------
-# LIVE SALES
+# SALES GENERATOR (HUMAN SIMULATION)
 # -----------------------------
-def live_sale():
-    cat=random.choice(list(PRODUCT_DB.keys()))
-    brand=random.choice(list(PRODUCT_DB[cat].keys()))
-    model=random.choice(PRODUCT_DB[cat][brand])
-    price=random.randint(*PRICE_RANGE[cat])
-    city=random.choice(CITIES)
-
+def generate_sale():
+    product = random.choice(list(PRODUCTS.keys()))
+    price = random.choice(PRODUCTS[product]) + random.randint(-1000, 2000)
+    city = random.choice(CITIES)
     return {
-        "timestamp":datetime.now(),
-        "category":cat,
-        "brand":brand,
-        "model":model,
-        "price":price,
-        "city":city
+        "time": datetime.now(),
+        "product": product,
+        "price": max(price, 500),
+        "city": city,
+        "persona": generate_persona()
     }
 
-st.session_state.sales = pd.concat(
-    [st.session_state.sales, pd.DataFrame([live_sale()])],
-    ignore_index=True
-)
+# -----------------------------
+# AUTO DATA APPEND
+# -----------------------------
+now = datetime.now()
+if (now - st.session_state.last_time).seconds >= SALE_INTERVAL_SECONDS:
+    new_data = pd.DataFrame([generate_sale()])
+    st.session_state.df = pd.concat([st.session_state.df, new_data], ignore_index=True)
+    st.session_state.last_time = now
 
-df = st.session_state.sales.copy()
+# limit rows
+st.session_state.df = st.session_state.df.tail(MAX_ROWS)
+
+df = st.session_state.df.copy()
 
 # -----------------------------
-# DATE FIX
+# AI INSIGHTS ENGINE
 # -----------------------------
-df["timestamp"] = pd.to_datetime(df["timestamp"])
+def demand_index(city_df):
+    if len(city_df) == 0:
+        return 0
+    return round((city_df["price"].sum() / len(city_df)) / 1000, 2)
 
-# 👇 STRICT YEAR FIX
-df["year"] = df["timestamp"].dt.year.astype(int)
-df["year_str"] = df["year"].astype(str)  # 👈 for clean plotting
-
-df["month"] = df["timestamp"].dt.strftime("%b")
-
-# Weather
-df["weather"] = df["city"].map(st.session_state.weather)
-
-# -----------------------------
-# FILTERS
-# -----------------------------
-st.sidebar.title("Filters")
-
-year=st.sidebar.multiselect("Year",sorted(df.year.unique()),default=sorted(df.year.unique()))
-category=st.sidebar.multiselect("Category",df.category.unique(),default=df.category.unique())
-
-brand=st.sidebar.multiselect(
-    "Brand",
-    df[df["category"].isin(category)]["brand"].unique(),
-    default=df[df["category"].isin(category)]["brand"].unique()
-)
-
-model=st.sidebar.multiselect(
-    "Product (Model)",
-    df[(df["category"].isin(category)) & (df["brand"].isin(brand))]["model"].unique(),
-    default=df[(df["category"].isin(category)) & (df["brand"].isin(brand))]["model"].unique()
-)
-
-city=st.sidebar.multiselect("City",df.city.unique(),default=df.city.unique())
-weather=st.sidebar.multiselect("Weather",df.weather.unique(),default=df.weather.unique())
-
-filtered=df[
-    (df.year.isin(year))&
-    (df.category.isin(category))&
-    (df.brand.isin(brand))&
-    (df.model.isin(model))&
-    (df.city.isin(city))&
-    (df.weather.isin(weather))
-].copy()
+def anomaly_detection(series):
+    if len(series) < 5:
+        return "Stable"
+    mean = np.mean(series)
+    last = series.iloc[-1]
+    if last > mean * 1.5:
+        return "🔥 Spike Detected"
+    elif last < mean * 0.5:
+        return "📉 Drop Detected"
+    return "Stable"
 
 # -----------------------------
-# PROFIT
+# UI HEADER
 # -----------------------------
-filtered["profit"]=filtered["price"]*random.uniform(0.08,0.22)
-
-# -----------------------------
-# KPI
-# -----------------------------
-col1,col2,col3,col4,col5=st.columns(5)
-
-col1.metric("Revenue",f"₹{filtered.price.sum():,.0f}")
-col2.metric("Orders",len(filtered))
-col3.metric("Avg Order",f"₹{filtered.price.mean():,.0f}")
-col4.metric("Profit",f"₹{filtered.profit.sum():,.0f}")
-
-growth=filtered.groupby("year")["price"].sum().pct_change().mean()*100
-col5.metric("YoY Growth",f"{growth:.1f}%")
+st.title("🤖 Human + AI Revenue Command Center")
+st.caption("Real-time Human behavior simulation + AI insights engine")
 
 # -----------------------------
-# WEATHER
+# METRICS
 # -----------------------------
-st.subheader("🌦 Weather Impact on Sales")
+col1, col2, col3, col4 = st.columns(4)
 
-weather_sales = filtered.groupby("weather")["price"].sum().reset_index()
-st.plotly_chart(px.bar(weather_sales, x="weather", y="price"), use_container_width=True)
-
-st.write("### Current Weather by City")
-weather_df = pd.DataFrame(list(st.session_state.weather.items()),columns=["City","Weather"])
-st.dataframe(weather_df)
-
-# -----------------------------
-# FORECAST
-# -----------------------------
-st.subheader("AI Revenue Forecast")
-
-monthly=filtered.set_index("timestamp").resample("ME")["price"].sum()
-forecast=monthly.tail(3).mean()
-
-st.metric("Next Month Prediction",f"₹{forecast:,.0f}")
-st.plotly_chart(px.line(monthly),use_container_width=True)
-
-# -----------------------------
-# YEAR TREND (FIXED)
-# -----------------------------
-st.subheader("Year Trend")
-
-year_df=(filtered.groupby("year_str")["price"].sum().reset_index().sort_values("year_str"))
-
-fig=px.bar(
-    year_df,
-    x="year_str",
-    y="price",
-    text_auto=True
-)
-
-fig.update_layout(
-    xaxis_title="Year",
-    yaxis_title="Revenue",
-)
-
-st.plotly_chart(fig,use_container_width=True)
-
-# -----------------------------
-# CATEGORY + BRAND
-# -----------------------------
-col1,col2=st.columns(2)
+total_rev = df["price"].sum() if not df.empty else 0
+orders = len(df)
+avg_order = df["price"].mean() if not df.empty else 0
+last_city = df["city"].iloc[-1] if not df.empty else "None"
 
 with col1:
-    st.plotly_chart(px.pie(filtered.groupby("category")["price"].sum().reset_index(),
-                           names="category",values="price"),use_container_width=True)
-
+    st.metric("💰 Revenue", f"₹{total_rev:,.0f}")
 with col2:
-    st.plotly_chart(px.bar(filtered.groupby("brand")["price"].sum().reset_index(),
-                           x="brand",y="price"),use_container_width=True)
+    st.metric("🧾 Orders", orders)
+with col3:
+    st.metric("📦 Avg Order", f"₹{avg_order:,.0f}")
+with col4:
+    st.metric("📍 Last City", last_city)
 
 # -----------------------------
-# INVENTORY
+# CHART: CITY REVENUE
 # -----------------------------
-if "inventory" not in st.session_state:
-    data=[]
-    for cat in PRODUCT_DB:
-        for brand in PRODUCT_DB[cat]:
-            for model_name in PRODUCT_DB[cat][brand]:
-                data.append([cat,brand,model_name,random.randint(20,120)])
+st.subheader("🏙️ City Intelligence Layer")
 
-    st.session_state.inventory=pd.DataFrame(data,columns=["category","brand","model","stock"])
-
-st.subheader("Inventory")
-st.dataframe(st.session_state.inventory)
+if not df.empty:
+    city_df = df.groupby("city", as_index=False)["price"].sum()
+    fig = px.bar(city_df, x="city", y="price", color="price", text="price")
+    st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# ALERTS
+# HUMAN BEHAVIOR VIEW
 # -----------------------------
-st.subheader("Alerts")
+st.subheader("🧠 Human Behavior Simulation Feed")
 
-if not st.session_state.inventory[st.session_state.inventory.stock<30].empty:
-    st.warning("Low Inventory")
-
-if filtered.tail(20)["price"].sum()>500000:
-    st.success("Sales Spike Detected")
-
-# -----------------------------
-# TOP MODELS
-# -----------------------------
-st.subheader("Top Models")
-
-top=filtered.groupby("model")["price"].sum().reset_index().sort_values("price",ascending=False).head(10)
-st.dataframe(top)
+if not df.empty:
+    show = df.tail(10).copy()
+    show["time"] = show["time"].dt.strftime("%H:%M:%S")
+    st.dataframe(show, use_container_width=True)
 
 # -----------------------------
-# LIVE SALES
+# AI DEMAND ENGINE
 # -----------------------------
-st.subheader("Live Sales")
+st.subheader("📊 AI Demand Intelligence")
 
-st.dataframe(filtered.sort_values("timestamp",ascending=False).head(20))
+if not df.empty:
+    demand_table = []
+    for city in df["city"].unique():
+        temp_df = df[df["city"] == city]
+        demand_table.append({
+            "City": city,
+            "Demand Index": demand_index(temp_df),
+            "Orders": len(temp_df),
+            "Revenue": temp_df["price"].sum()
+        })
+
+    demand_df = pd.DataFrame(demand_table)
+    st.dataframe(demand_df, use_container_width=True)
+
+# -----------------------------
+# PRODUCT INTELLIGENCE
+# -----------------------------
+st.subheader("🛍️ Product Intelligence")
+
+if not df.empty:
+    product_df = df.groupby("product", as_index=False)["price"].sum()
+    fig2 = px.pie(product_df, names="product", values="price", hole=0.5)
+    st.plotly_chart(fig2, use_container_width=True)
+
+# -----------------------------
+# ANOMALY DETECTION
+# -----------------------------
+st.subheader("⚡ AI Anomaly Detector")
+
+if not df.empty:
+    trend = df.groupby(pd.Grouper(key="time", freq="2min"))["price"].sum().reset_index()
+    status = anomaly_detection(trend["price"])
+    st.info(f"System Status: {status}")
+
+# -----------------------------
+# WEATHERLESS SMART INSIGHT
+# -----------------------------
+st.subheader("🧠 AI Recommendation Engine")
+
+if not df.empty:
+    top_product = df.groupby("product")["price"].sum().idxmax()
+    top_city = df.groupby("city")["price"].sum().idxmax()
+
+    st.success(f"🔥 Best Product: {top_product}")
+    st.success(f"📍 Best City: {top_city}")
+    st.info("💡 Suggestion: Increase ads targeting high-demand city-product pair")
+
+# -----------------------------
+# FOOTER
+# -----------------------------
+st.caption("⚡ Powered by Human Simulation AI + Streamlit Intelligence Engine")
