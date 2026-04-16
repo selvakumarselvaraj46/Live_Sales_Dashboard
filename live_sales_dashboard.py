@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -9,35 +9,51 @@ from streamlit_autorefresh import st_autorefresh
 # -----------------------------
 # CONFIG
 # -----------------------------
-st.set_page_config(page_title="Enterprise Revenue Intelligence 2020-2026", layout="wide")
+st.set_page_config(
+    page_title="Enterprise Revenue Control Room",
+    layout="wide",
+    page_icon="📊"
+)
 
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
-    background: #0b0f19;
+    background: #0f1117;
     color: #e6e6e6;
+}
+[data-testid="stHeader"] {
+    background: rgba(0,0,0,0);
+}
+.block {
+    background: #161a25;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #2a2f3a;
 }
 </style>
 """, unsafe_allow_html=True)
 
+# -----------------------------
+# AUTO REFRESH
+# -----------------------------
 st_autorefresh(interval=5000, key="live")
 
 # -----------------------------
-# PRODUCTS (ENTERPRISE LEVEL)
+# DATASET (10+ PREMIUM PRODUCTS)
 # -----------------------------
 PRODUCTS = {
-    "MacBook Pro": 180000,
-    "iPhone 15 Pro": 130000,
-    "Samsung S24": 110000,
-    "Dell XPS": 150000,
-    "LG OLED TV": 90000,
-    "Sony Headphones": 35000,
-    "HP Laptop": 75000,
-    "Lenovo ThinkPad": 140000,
-    "AC 1.5T": 50000,
-    "Washing Machine": 45000,
-    "Canon DSLR": 80000,
-    "Bluetooth Speaker": 8000
+    "Apple MacBook Pro": [120000, 180000, 220000],
+    "iPhone 15 Pro": [90000, 120000, 150000],
+    "Samsung Galaxy S24": [80000, 100000, 130000],
+    "Dell XPS Laptop": [95000, 140000, 170000],
+    "LG OLED TV": [60000, 85000, 120000],
+    "Sony WH-1000XM5": [25000, 30000, 40000],
+    "HP Pavilion": [55000, 75000, 90000],
+    "Lenovo ThinkPad X1": [110000, 150000, 190000],
+    "Whirlpool AC": [35000, 50000, 70000],
+    "Bosch Washing Machine": [30000, 45000, 65000],
+    "Canon DSLR": [50000, 80000, 120000],
+    "Boat Speaker": [3000, 6000, 12000],
 }
 
 CITIES = ["Chennai", "Mumbai", "Bangalore", "Delhi", "Hyderabad", "Pune"]
@@ -52,97 +68,85 @@ CITY_COORDS = {
 }
 
 # -----------------------------
-# WEATHER
+# WEATHER API
 # -----------------------------
 @st.cache_data(ttl=600)
 def get_weather(city):
-    lat, lon = CITY_COORDS[city]
-    r = requests.get(
-        "https://api.open-meteo.com/v1/forecast",
-        params={"latitude": lat, "longitude": lon, "current": "temperature_2m,weather_code"},
-        timeout=5
-    )
-    data = r.json()["current"]
-    temp = data["temperature_2m"]
-    code = data["weather_code"]
+    try:
+        lat, lon = CITY_COORDS[city]
+        r = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "current": "temperature_2m,weather_code"
+            },
+            timeout=5
+        )
+        data = r.json()["current"]
+        temp = data["temperature_2m"]
+        code = data["weather_code"]
 
-    if temp > 35:
-        impact = "Heat"
-    elif code in [51, 61, 63, 65, 80]:
-        impact = "Rain"
-    else:
-        impact = "Normal"
+        if temp > 35:
+            impact = "Heat"
+        elif code in [51, 61, 63, 65, 80]:
+            impact = "Rain"
+        else:
+            impact = "Normal"
 
-    return {"city": city, "temp": temp, "impact": impact}
-
-# -----------------------------
-# HISTORICAL DATA (2020–2025)
-# -----------------------------
-@st.cache_data
-def generate_history():
-    data = []
-    for year in range(2020, 2026):
-        for month in range(1, 13):
-            for _ in range(60):  # monthly transactions
-                product = random.choice(list(PRODUCTS.keys()))
-                data.append({
-                    "date": datetime(year, month, random.randint(1, 28)),
-                    "year": year,
-                    "month": month,
-                    "product": product,
-                    "city": random.choice(CITIES),
-                    "price": PRODUCTS[product] + random.randint(-5000, 8000)
-                })
-    return pd.DataFrame(data)
-
-hist_df = generate_history()
+        return {"city": city, "temp": temp, "impact": impact}
+    except:
+        return {"city": city, "temp": None, "impact": "Unknown"}
 
 # -----------------------------
-# LIVE DATA (2026 STREAM)
+# SESSION DATA
 # -----------------------------
-if "live_df" not in st.session_state:
-    st.session_state.live_df = pd.DataFrame(columns=["date", "year", "product", "city", "price"])
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame(columns=["time", "product", "city", "price"])
 
-def add_live():
+def generate_sale():
     product = random.choice(list(PRODUCTS.keys()))
-    st.session_state.live_df.loc[len(st.session_state.live_df)] = {
-        "date": datetime.now(),
-        "year": 2026,
+    return {
+        "time": datetime.now(),
         "product": product,
         "city": random.choice(CITIES),
-        "price": PRODUCTS[product] + random.randint(-3000, 6000)
+        "price": random.choice(PRODUCTS[product]),
     }
 
-add_live()
+def add_sale():
+    new = pd.DataFrame([generate_sale()])
+    st.session_state.df = pd.concat([st.session_state.df, new], ignore_index=True)
 
-live_df = st.session_state.live_df
+    if len(st.session_state.df) > 400:
+        st.session_state.df = st.session_state.df.tail(400)
 
-# -----------------------------
-# COMBINED DATASET
-# -----------------------------
-df = pd.concat([hist_df, live_df], ignore_index=True)
+add_sale()
 
-df["date"] = pd.to_datetime(df["date"])
-df["year"] = df["date"].dt.year
+df = st.session_state.df.copy()
+df["time"] = pd.to_datetime(df["time"])
+df["year"] = df["time"].dt.year
 
 weather = pd.DataFrame([get_weather(c) for c in CITIES])
 
 # -----------------------------
-# FILTERS
+# FILTERS (HIGH CONFIG)
 # -----------------------------
-st.title("📊 Enterprise Revenue Intelligence (2020 → Live 2026)")
+st.title("📊 Enterprise Control Room – Revenue Intelligence")
 
-st.sidebar.header("🎛️ Filters")
+st.sidebar.header("🎛️ Advanced Filters")
 
-year_f = st.sidebar.multiselect("Year", sorted(df["year"].unique()), default=sorted(df["year"].unique()))
-city_f = st.sidebar.multiselect("City", CITIES, default=CITIES)
-product_f = st.sidebar.multiselect("Product", list(PRODUCTS.keys()), default=list(PRODUCTS.keys()))
-weather_f = st.sidebar.multiselect("Weather", ["Heat", "Rain", "Normal"], default=["Heat","Rain","Normal"])
+city_f = st.sidebar.multiselect("Cities", CITIES, default=CITIES)
+product_f = st.sidebar.multiselect("Products", list(PRODUCTS.keys()), default=list(PRODUCTS.keys()))
+year_f = st.sidebar.multiselect("Year", sorted(df["year"].unique()), default=list(df["year"].unique()))
+weather_f = st.sidebar.multiselect("Weather", ["Heat", "Rain", "Normal", "Unknown"], default=["Heat","Rain","Normal","Unknown"])
 
+# -----------------------------
+# APPLY FILTERS
+# -----------------------------
 df = df[
-    (df["year"].isin(year_f)) &
     (df["city"].isin(city_f)) &
-    (df["product"].isin(product_f))
+    (df["product"].isin(product_f)) &
+    (df["year"].isin(year_f))
 ]
 
 merged = df.merge(weather, on="city", how="left")
@@ -156,67 +160,57 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("💰 Revenue", f"₹{merged['price'].sum():,.0f}")
 col2.metric("📦 Orders", len(merged))
 col3.metric("📊 Avg Order", f"₹{merged['price'].mean():,.0f}" if len(merged) else "₹0")
-col4.metric("📅 Years Active", merged["year"].nunique())
+col4.metric("🏙️ Active Cities", merged["city"].nunique())
 
 st.markdown("---")
 
 # -----------------------------
-# 1. YEAR TREND (IMPORTANT)
+# VISUAL 1 - CITY PERFORMANCE
 # -----------------------------
-st.subheader("📈 Year-wise Revenue Growth (2020–2026)")
-
-year_df = merged.groupby("year", as_index=False)["price"].sum()
-
-fig1 = px.line(year_df, x="year", y="price", markers=True)
-st.plotly_chart(fig1, use_container_width=True)
-
-# -----------------------------
-# 2. CITY PERFORMANCE
-# -----------------------------
-st.subheader("🏙️ City Performance")
+st.subheader("🏙️ City Intelligence Matrix")
 
 city_df = merged.groupby("city", as_index=False)["price"].sum().sort_values("price", ascending=False)
 
-fig2 = px.bar(city_df, x="city", y="price", color="price", text="price")
-st.plotly_chart(fig2, use_container_width=True)
+fig1 = px.bar(city_df, x="city", y="price", color="price", text="price")
+st.plotly_chart(fig1, use_container_width=True)
 
 # -----------------------------
-# 3. PRODUCT PERFORMANCE
+# VISUAL 2 - PRODUCT PERFORMANCE
 # -----------------------------
-st.subheader("📦 Product Intelligence Matrix")
+st.subheader("📦 Product Revenue Engine")
 
 prod_df = merged.groupby("product", as_index=False)["price"].sum().sort_values("price", ascending=False)
 
-fig3 = px.bar(prod_df, x="product", y="price", color="price")
-st.plotly_chart(fig3, use_container_width=True)
+fig2 = px.bar(prod_df, x="product", y="price", color="price", text="price")
+st.plotly_chart(fig2, use_container_width=True)
 
 # -----------------------------
-# 4. HEATMAP (ENTERPRISE INSIGHT)
-# -----------------------------
-st.subheader("🔥 Year vs Product Heatmap")
-
-heat = merged.pivot_table(values="price", index="product", columns="year", aggfunc="sum", fill_value=0)
-
-fig4 = px.imshow(heat, text_auto=True, aspect="auto")
-st.plotly_chart(fig4, use_container_width=True)
-
-# -----------------------------
-# 5. WEATHER IMPACT
+# VISUAL 3 - WEATHER IMPACT
 # -----------------------------
 st.subheader("🌦️ Weather Intelligence Layer")
 
-wdf = merged.groupby("impact", as_index=False)["price"].sum()
+weather_df = merged.groupby("impact", as_index=False)["price"].sum()
 
-fig5 = px.pie(wdf, names="impact", values="price", hole=0.55)
-st.plotly_chart(fig5, use_container_width=True)
+fig3 = px.pie(weather_df, names="impact", values="price", hole=0.55)
+st.plotly_chart(fig3, use_container_width=True)
+
+# -----------------------------
+# VISUAL 4 - TREND ENGINE
+# -----------------------------
+st.subheader("📈 Real-Time Revenue Stream")
+
+trend = merged.set_index("time").resample("1min")["price"].sum().reset_index()
+
+fig4 = px.line(trend, x="time", y="price", markers=True)
+st.plotly_chart(fig4, use_container_width=True)
 
 # -----------------------------
 # LIVE TABLE
 # -----------------------------
-st.subheader("🛰️ Live Enterprise Feed")
+st.subheader("🛰️ Live Transaction Feed")
 
 st.dataframe(
-    merged.sort_values("date", ascending=False).head(20),
+    merged.sort_values("time", ascending=False).head(20),
     use_container_width=True,
     hide_index=True
 )
@@ -224,4 +218,4 @@ st.dataframe(
 # -----------------------------
 # FOOTER
 # -----------------------------
-st.caption("⚡ Enterprise System: Historical 2020–2026 + Live Stream + AI-ready structure")
+st.caption("⚡ Enterprise Grade Dashboard: Filters + Weather AI + Product Intelligence + Live Stream (5s)")
