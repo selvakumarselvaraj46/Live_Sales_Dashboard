@@ -20,23 +20,16 @@ st.set_page_config(
 # -----------------------------
 st.markdown("""
 <style>
-/* Main Background */
 [data-testid="stAppViewContainer"] {
     background: linear-gradient(135deg, #0f172a, #020617);
     color: #e2e8f0;
 }
-
-/* Remove header background */
 [data-testid="stHeader"] {
     background: rgba(0,0,0,0);
 }
-
-/* Sidebar */
 section[data-testid="stSidebar"] {
     background: #020617;
 }
-
-/* KPI Cards */
 .kpi-card {
     background: linear-gradient(145deg, #1e293b, #0f172a);
     padding: 20px;
@@ -45,19 +38,15 @@ section[data-testid="stSidebar"] {
     box-shadow: 0 0 15px rgba(59,130,246,0.2);
     text-align: center;
 }
-
 .kpi-title {
     font-size: 14px;
     color: #94a3b8;
 }
-
 .kpi-value {
     font-size: 26px;
     font-weight: bold;
     color: #38bdf8;
 }
-
-/* Section Titles */
 h2, h3 {
     color: #e2e8f0;
 }
@@ -89,46 +78,6 @@ PRODUCTS = {
 
 CITIES = ["Chennai", "Mumbai", "Bangalore", "Delhi", "Hyderabad", "Pune"]
 
-CITY_COORDS = {
-    "Chennai": (13.08, 80.27),
-    "Mumbai": (19.07, 72.87),
-    "Bangalore": (12.97, 77.59),
-    "Delhi": (28.61, 77.20),
-    "Hyderabad": (17.38, 78.48),
-    "Pune": (18.52, 73.85),
-}
-
-# -----------------------------
-# WEATHER API
-# -----------------------------
-@st.cache_data(ttl=600)
-def get_weather(city):
-    try:
-        lat, lon = CITY_COORDS[city]
-        r = requests.get(
-            "https://api.open-meteo.com/v1/forecast",
-            params={
-                "latitude": lat,
-                "longitude": lon,
-                "current": "temperature_2m,weather_code"
-            },
-            timeout=5
-        )
-        data = r.json()["current"]
-        temp = data["temperature_2m"]
-        code = data["weather_code"]
-
-        if temp > 35:
-            impact = "Heat"
-        elif code in [51, 61, 63, 65, 80]:
-            impact = "Rain"
-        else:
-            impact = "Normal"
-
-        return {"city": city, "temp": temp, "impact": impact}
-    except:
-        return {"city": city, "temp": None, "impact": "Unknown"}
-
 # -----------------------------
 # SESSION DATA
 # -----------------------------
@@ -157,10 +106,8 @@ df = st.session_state.df.copy()
 df["time"] = pd.to_datetime(df["time"])
 df["year"] = df["time"].dt.year
 
-weather = pd.DataFrame([get_weather(c) for c in CITIES])
-
 # -----------------------------
-# FILTERS
+# FILTERS (NO WEATHER)
 # -----------------------------
 st.title("📊 Enterprise Control Room – Revenue Intelligence")
 
@@ -169,7 +116,6 @@ st.sidebar.header("🎛️ Filters")
 city_f = st.sidebar.multiselect("Cities", CITIES, default=CITIES)
 product_f = st.sidebar.multiselect("Products", list(PRODUCTS.keys()), default=list(PRODUCTS.keys()))
 year_f = st.sidebar.multiselect("Year", sorted(df["year"].unique()), default=list(df["year"].unique()))
-weather_f = st.sidebar.multiselect("Weather", ["Heat", "Rain", "Normal", "Unknown"], default=["Heat","Rain","Normal","Unknown"])
 
 df = df[
     (df["city"].isin(city_f)) &
@@ -177,11 +123,10 @@ df = df[
     (df["year"].isin(year_f))
 ]
 
-merged = df.merge(weather, on="city", how="left")
-merged = merged[merged["impact"].isin(weather_f)]
+merged = df.copy()
 
 # -----------------------------
-# KPI CARDS (CUSTOM)
+# KPI CARDS
 # -----------------------------
 col1, col2, col3, col4 = st.columns(4)
 
@@ -209,12 +154,12 @@ with col4:
 st.markdown("---")
 
 # -----------------------------
-# COLOR PALETTE
+# VISUAL COLORS
 # -----------------------------
 colors = ["#38bdf8", "#6366f1", "#22c55e", "#f59e0b", "#ef4444"]
 
 # -----------------------------
-# VISUALS
+# CITY PERFORMANCE
 # -----------------------------
 st.subheader("🏙️ City Performance")
 
@@ -228,6 +173,8 @@ fig1.update_layout(template="plotly_dark")
 st.plotly_chart(fig1, use_container_width=True)
 
 # -----------------------------
+# PRODUCT PERFORMANCE
+# -----------------------------
 st.subheader("📦 Product Performance")
 
 prod_df = merged.groupby("product", as_index=False)["price"].sum()
@@ -240,24 +187,13 @@ fig2.update_layout(template="plotly_dark")
 st.plotly_chart(fig2, use_container_width=True)
 
 # -----------------------------
-st.subheader("🌦️ Weather Impact")
-
-weather_df = merged.groupby("impact", as_index=False)["price"].sum()
-
-fig3 = px.pie(weather_df, names="impact", values="price",
-              color_discrete_sequence=colors)
-
-fig3.update_layout(template="plotly_dark")
-st.plotly_chart(fig3, use_container_width=True)
-
+# TREND
 # -----------------------------
 st.subheader("📈 Revenue Trend")
 
 trend = merged.set_index("time").resample("1min")["price"].sum().reset_index()
 
-fig4 = px.line(trend, x="time", y="price",
-               markers=True)
-
+fig4 = px.line(trend, x="time", y="price", markers=True)
 fig4.update_traces(line=dict(color="#38bdf8", width=3))
 fig4.update_layout(template="plotly_dark")
 
@@ -276,4 +212,4 @@ st.dataframe(
 # -----------------------------
 # FOOTER
 # -----------------------------
-st.caption("⚡ Enterprise Dashboard • Professional UI • Live Data • Weather Intelligence")
+st.caption("⚡ Enterprise Dashboard • Professional UI • Live Data")
