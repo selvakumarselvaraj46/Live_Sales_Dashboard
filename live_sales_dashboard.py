@@ -15,20 +15,51 @@ st.set_page_config(
     page_icon="📊"
 )
 
+# -----------------------------
+# PROFESSIONAL DARK THEME
+# -----------------------------
 st.markdown("""
 <style>
+/* Main Background */
 [data-testid="stAppViewContainer"] {
-    background: #0f1117;
-    color: #e6e6e6;
+    background: linear-gradient(135deg, #0f172a, #020617);
+    color: #e2e8f0;
 }
+
+/* Remove header background */
 [data-testid="stHeader"] {
     background: rgba(0,0,0,0);
 }
-.block {
-    background: #161a25;
-    padding: 15px;
-    border-radius: 12px;
-    border: 1px solid #2a2f3a;
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: #020617;
+}
+
+/* KPI Cards */
+.kpi-card {
+    background: linear-gradient(145deg, #1e293b, #0f172a);
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px solid #334155;
+    box-shadow: 0 0 15px rgba(59,130,246,0.2);
+    text-align: center;
+}
+
+.kpi-title {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.kpi-value {
+    font-size: 26px;
+    font-weight: bold;
+    color: #38bdf8;
+}
+
+/* Section Titles */
+h2, h3 {
+    color: #e2e8f0;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -39,7 +70,7 @@ st.markdown("""
 st_autorefresh(interval=5000, key="live")
 
 # -----------------------------
-# DATASET (10+ PREMIUM PRODUCTS)
+# DATASET
 # -----------------------------
 PRODUCTS = {
     "Apple MacBook Pro": [120000, 180000, 220000],
@@ -129,20 +160,17 @@ df["year"] = df["time"].dt.year
 weather = pd.DataFrame([get_weather(c) for c in CITIES])
 
 # -----------------------------
-# FILTERS (HIGH CONFIG)
+# FILTERS
 # -----------------------------
 st.title("📊 Enterprise Control Room – Revenue Intelligence")
 
-st.sidebar.header("🎛️ Advanced Filters")
+st.sidebar.header("🎛️ Filters")
 
 city_f = st.sidebar.multiselect("Cities", CITIES, default=CITIES)
 product_f = st.sidebar.multiselect("Products", list(PRODUCTS.keys()), default=list(PRODUCTS.keys()))
 year_f = st.sidebar.multiselect("Year", sorted(df["year"].unique()), default=list(df["year"].unique()))
 weather_f = st.sidebar.multiselect("Weather", ["Heat", "Rain", "Normal", "Unknown"], default=["Heat","Rain","Normal","Unknown"])
 
-# -----------------------------
-# APPLY FILTERS
-# -----------------------------
 df = df[
     (df["city"].isin(city_f)) &
     (df["product"].isin(product_f)) &
@@ -153,69 +181,99 @@ merged = df.merge(weather, on="city", how="left")
 merged = merged[merged["impact"].isin(weather_f)]
 
 # -----------------------------
-# KPI CARDS
+# KPI CARDS (CUSTOM)
 # -----------------------------
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("💰 Revenue", f"₹{merged['price'].sum():,.0f}")
-col2.metric("📦 Orders", len(merged))
-col3.metric("📊 Avg Order", f"₹{merged['price'].mean():,.0f}" if len(merged) else "₹0")
-col4.metric("🏙️ Active Cities", merged["city"].nunique())
+def kpi(label, value):
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">{label}</div>
+        <div class="kpi-value">{value}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col1:
+    kpi("💰 Revenue", f"₹{merged['price'].sum():,.0f}")
+
+with col2:
+    kpi("📦 Orders", f"{len(merged)}")
+
+with col3:
+    avg = merged['price'].mean() if len(merged) else 0
+    kpi("📊 Avg Order", f"₹{avg:,.0f}")
+
+with col4:
+    kpi("🏙️ Cities", merged["city"].nunique())
 
 st.markdown("---")
 
 # -----------------------------
-# VISUAL 1 - CITY PERFORMANCE
+# COLOR PALETTE
 # -----------------------------
-st.subheader("🏙️ City Intelligence Matrix")
+colors = ["#38bdf8", "#6366f1", "#22c55e", "#f59e0b", "#ef4444"]
 
-city_df = merged.groupby("city", as_index=False)["price"].sum().sort_values("price", ascending=False)
+# -----------------------------
+# VISUALS
+# -----------------------------
+st.subheader("🏙️ City Performance")
 
-fig1 = px.bar(city_df, x="city", y="price", color="price", text="price")
+city_df = merged.groupby("city", as_index=False)["price"].sum()
+
+fig1 = px.bar(city_df, x="city", y="price",
+              color="price",
+              color_continuous_scale="Blues")
+
+fig1.update_layout(template="plotly_dark")
 st.plotly_chart(fig1, use_container_width=True)
 
 # -----------------------------
-# VISUAL 2 - PRODUCT PERFORMANCE
-# -----------------------------
-st.subheader("📦 Product Revenue Engine")
+st.subheader("📦 Product Performance")
 
-prod_df = merged.groupby("product", as_index=False)["price"].sum().sort_values("price", ascending=False)
+prod_df = merged.groupby("product", as_index=False)["price"].sum()
 
-fig2 = px.bar(prod_df, x="product", y="price", color="price", text="price")
+fig2 = px.bar(prod_df, x="product", y="price",
+              color="price",
+              color_continuous_scale="Viridis")
+
+fig2.update_layout(template="plotly_dark")
 st.plotly_chart(fig2, use_container_width=True)
 
 # -----------------------------
-# VISUAL 3 - WEATHER IMPACT
-# -----------------------------
-st.subheader("🌦️ Weather Intelligence Layer")
+st.subheader("🌦️ Weather Impact")
 
 weather_df = merged.groupby("impact", as_index=False)["price"].sum()
 
-fig3 = px.pie(weather_df, names="impact", values="price", hole=0.55)
+fig3 = px.pie(weather_df, names="impact", values="price",
+              color_discrete_sequence=colors)
+
+fig3.update_layout(template="plotly_dark")
 st.plotly_chart(fig3, use_container_width=True)
 
 # -----------------------------
-# VISUAL 4 - TREND ENGINE
-# -----------------------------
-st.subheader("📈 Real-Time Revenue Stream")
+st.subheader("📈 Revenue Trend")
 
 trend = merged.set_index("time").resample("1min")["price"].sum().reset_index()
 
-fig4 = px.line(trend, x="time", y="price", markers=True)
+fig4 = px.line(trend, x="time", y="price",
+               markers=True)
+
+fig4.update_traces(line=dict(color="#38bdf8", width=3))
+fig4.update_layout(template="plotly_dark")
+
 st.plotly_chart(fig4, use_container_width=True)
 
 # -----------------------------
-# LIVE TABLE
+# TABLE
 # -----------------------------
-st.subheader("🛰️ Live Transaction Feed")
+st.subheader("🛰️ Live Transactions")
 
 st.dataframe(
     merged.sort_values("time", ascending=False).head(20),
-    use_container_width=True,
-    hide_index=True
+    use_container_width=True
 )
 
 # -----------------------------
 # FOOTER
 # -----------------------------
-st.caption("⚡ Enterprise Grade Dashboard: Filters + Weather AI + Product Intelligence + Live Stream (5s)")
+st.caption("⚡ Enterprise Dashboard • Professional UI • Live Data • Weather Intelligence")
