@@ -22,7 +22,6 @@ st_autorefresh(interval=5000, key="refresh")
 # PRODUCT DATABASE
 # -----------------------------
 PRODUCT_DB = {
-
 "Mobile":{
 "Apple":["iPhone 13","iPhone 14","iPhone 15","iPhone 15 Pro"],
 "Samsung":["S23","S24","A54","M34"],
@@ -35,7 +34,6 @@ PRODUCT_DB = {
 "Motorola":["Edge 40","G84","G54"],
 "Nothing":["Phone 1","Phone 2"]
 },
-
 "Laptop":{
 "Apple":["Macbook M1","Macbook M2"],
 "Dell":["Inspiron","XPS","G15"],
@@ -43,7 +41,6 @@ PRODUCT_DB = {
 "Lenovo":["Legion","Thinkpad","IdeaPad"],
 "Asus":["ROG","TUF","Vivobook"]
 },
-
 "Accessories":{
 "Boat":["Earbuds","Headphones"],
 "Noise":["Smartwatch","Earbuds"],
@@ -53,11 +50,7 @@ PRODUCT_DB = {
 }
 }
 
-CITIES = [
-"Chennai","Bangalore","Hyderabad","Mumbai",
-"Delhi","Pune","Kolkata","Ahmedabad"
-]
-
+CITIES = ["Chennai","Bangalore","Hyderabad","Mumbai","Delhi","Pune","Kolkata","Ahmedabad"]
 WEATHER_TYPES = ["Rain", "Heat", "Normal"]
 
 PRICE_RANGE = {
@@ -73,7 +66,7 @@ def get_weather():
     return {city: random.choice(WEATHER_TYPES) for city in CITIES}
 
 # -----------------------------
-# HISTORICAL DATA
+# DATA GENERATION
 # -----------------------------
 def generate_data():
     rows=[]
@@ -89,10 +82,7 @@ def generate_data():
         rows.append([start,cat,brand,model,price,city])
         start+=timedelta(hours=random.randint(3,12))
 
-    return pd.DataFrame(
-        rows,
-        columns=["timestamp","category","brand","model","price","city"]
-    )
+    return pd.DataFrame(rows,columns=["timestamp","category","brand","model","price","city"])
 
 # -----------------------------
 # SESSION STATE
@@ -190,91 +180,15 @@ growth=filtered.groupby("year")["price"].sum().pct_change().mean()*100
 col5.metric("YoY Growth",f"{growth:.1f}%")
 
 # -----------------------------
-# WEATHER IMPACT
-# -----------------------------
-st.subheader("🌦 Weather Impact on Sales")
-
-weather_sales = filtered.groupby("weather")["price"].sum().reset_index()
-st.plotly_chart(px.bar(weather_sales, x="weather", y="price"), use_container_width=True)
-
-st.write("### Current Weather by City")
-weather_df = pd.DataFrame(list(st.session_state.weather.items()),columns=["City","Weather"])
-st.dataframe(weather_df)
-
-# -----------------------------
-# AI FORECAST (FIXED HERE)
-# -----------------------------
-st.subheader("AI Revenue Forecast")
-
-monthly=filtered.set_index("timestamp").resample("ME")["price"].sum()
-
-forecast=monthly.tail(3).mean()
-
-st.metric("Next Month Prediction",f"₹{forecast:,.0f}")
-st.plotly_chart(px.line(monthly),use_container_width=True)
-
-# -----------------------------
-# YEAR TREND
+# YEAR TREND (FIXED)
 # -----------------------------
 st.subheader("Year Trend")
 
 year_df=(filtered.groupby("year")["price"].sum().reset_index().sort_values("year"))
 
+# ✅ Convert to string to avoid decimal scale
+year_df["year"] = year_df["year"].astype(str)
+
 fig=px.bar(year_df,x="year",y="price",color="year",text_auto=True)
-fig.update_layout(xaxis=dict(type="category"))
 
 st.plotly_chart(fig,use_container_width=True)
-
-# -----------------------------
-# CATEGORY + BRAND
-# -----------------------------
-col1,col2=st.columns(2)
-
-with col1:
-    st.plotly_chart(px.pie(filtered.groupby("category")["price"].sum().reset_index(),
-                           names="category",values="price"),use_container_width=True)
-
-with col2:
-    st.plotly_chart(px.bar(filtered.groupby("brand")["price"].sum().reset_index(),
-                           x="brand",y="price"),use_container_width=True)
-
-# -----------------------------
-# INVENTORY
-# -----------------------------
-if "inventory" not in st.session_state:
-    data=[]
-    for cat in PRODUCT_DB:
-        for brand in PRODUCT_DB[cat]:
-            for model_name in PRODUCT_DB[cat][brand]:
-                data.append([cat,brand,model_name,random.randint(20,120)])
-
-    st.session_state.inventory=pd.DataFrame(data,columns=["category","brand","model","stock"])
-
-st.subheader("Inventory")
-st.dataframe(st.session_state.inventory)
-
-# -----------------------------
-# ALERTS
-# -----------------------------
-st.subheader("Alerts")
-
-if not st.session_state.inventory[st.session_state.inventory.stock<30].empty:
-    st.warning("Low Inventory")
-
-if filtered.tail(20)["price"].sum()>500000:
-    st.success("Sales Spike Detected")
-
-# -----------------------------
-# TOP MODELS
-# -----------------------------
-st.subheader("Top Models")
-
-top=filtered.groupby("model")["price"].sum().reset_index().sort_values("price",ascending=False).head(10)
-st.dataframe(top)
-
-# -----------------------------
-# LIVE SALES
-# -----------------------------
-st.subheader("Live Sales")
-
-st.dataframe(filtered.sort_values("timestamp",ascending=False).head(20))
