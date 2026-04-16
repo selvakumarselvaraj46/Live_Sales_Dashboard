@@ -176,6 +176,43 @@ PRODUCTS = {
     "Canon DSLR":            [50000,  80000,  120000],
     "Boat Speaker":          [3000,   6000,   12000],
 }
+
+# -----------------------------
+# BRAND & CATEGORY MAPPINGS  ← NEW
+# -----------------------------
+PRODUCT_BRAND = {
+    "Apple MacBook Pro":     "Apple",
+    "iPhone 15 Pro":         "Apple",
+    "Samsung Galaxy S24":    "Samsung",
+    "Dell XPS Laptop":       "Dell",
+    "LG OLED TV":            "LG",
+    "Sony WH-1000XM5":       "Sony",
+    "HP Pavilion":           "HP",
+    "Lenovo ThinkPad X1":    "Lenovo",
+    "Whirlpool AC":          "Whirlpool",
+    "Bosch Washing Machine": "Bosch",
+    "Canon DSLR":            "Canon",
+    "Boat Speaker":          "Boat",
+}
+
+PRODUCT_CATEGORY = {
+    "Apple MacBook Pro":     "Laptop",
+    "iPhone 15 Pro":         "Smartphone",
+    "Samsung Galaxy S24":    "Smartphone",
+    "Dell XPS Laptop":       "Laptop",
+    "LG OLED TV":            "Television",
+    "Sony WH-1000XM5":       "Audio",
+    "HP Pavilion":           "Laptop",
+    "Lenovo ThinkPad X1":    "Laptop",
+    "Whirlpool AC":          "Appliance",
+    "Bosch Washing Machine": "Appliance",
+    "Canon DSLR":            "Camera",
+    "Boat Speaker":          "Audio",
+}
+
+ALL_BRANDS     = sorted(set(PRODUCT_BRAND.values()))
+ALL_CATEGORIES = sorted(set(PRODUCT_CATEGORY.values()))
+
 CITIES = ["Chennai", "Mumbai", "Bangalore", "Delhi", "Hyderabad", "Pune"]
 
 CITY_COLORS = {
@@ -211,21 +248,28 @@ def add_sale():
 add_sale()
 
 df = st.session_state.df.copy()
-df["time"] = pd.to_datetime(df["time"])
-df["year"] = df["time"].dt.year
+df["time"]     = pd.to_datetime(df["time"])
+df["year"]     = df["time"].dt.year
+df["brand"]    = df["product"].map(PRODUCT_BRAND)      # ← NEW
+df["category"] = df["product"].map(PRODUCT_CATEGORY)   # ← NEW
 
 # -----------------------------
 # SIDEBAR FILTERS
 # -----------------------------
 st.sidebar.markdown("### 🎛️ Dashboard Filters")
-city_f    = st.sidebar.multiselect("🏙️ Cities",   CITIES,               default=CITIES)
-product_f = st.sidebar.multiselect("📦 Products", list(PRODUCTS.keys()), default=list(PRODUCTS.keys()))
-year_f    = st.sidebar.multiselect("📅 Year",     sorted(df["year"].unique()), default=list(df["year"].unique()))
+
+city_f     = st.sidebar.multiselect("🏙️ Cities",     CITIES,                              default=CITIES)
+product_f  = st.sidebar.multiselect("📦 Products",   list(PRODUCTS.keys()),               default=list(PRODUCTS.keys()))
+year_f     = st.sidebar.multiselect("📅 Year",       sorted(df["year"].unique()),         default=list(df["year"].unique()))
+brand_f    = st.sidebar.multiselect("🏷️ Brand",      ALL_BRANDS,                          default=ALL_BRANDS)      # ← NEW
+category_f = st.sidebar.multiselect("🗂️ Category",   ALL_CATEGORIES,                      default=ALL_CATEGORIES)  # ← NEW
 
 df = df[
     (df["city"].isin(city_f)) &
     (df["product"].isin(product_f)) &
-    (df["year"].isin(year_f))
+    (df["year"].isin(year_f)) &
+    (df["brand"].isin(brand_f)) &          # ← NEW
+    (df["category"].isin(category_f))      # ← NEW
 ]
 merged = df.copy()
 
@@ -506,12 +550,14 @@ live_df = (
 live_df["time"]  = live_df["time"].dt.strftime("%H:%M:%S")
 live_df["price"] = live_df["price"].apply(lambda x: f"₹{x:,.0f}")
 live_df = live_df.rename(columns={
-    "time":    "⏱ Time",
-    "product": "📦 Product",
-    "city":    "🏙️ City",
-    "price":   "💰 Amount",
+    "time":     "⏱ Time",
+    "product":  "📦 Product",
+    "city":     "🏙️ City",
+    "price":    "💰 Amount",
+    "brand":    "🏷️ Brand",
+    "category": "🗂️ Category",
 })
-live_df = live_df[["⏱ Time", "📦 Product", "🏙️ City", "💰 Amount"]]
+live_df = live_df[["⏱ Time", "📦 Product", "🏷️ Brand", "🗂️ Category", "🏙️ City", "💰 Amount"]]
 
 st.dataframe(live_df, use_container_width=True, hide_index=True)
 
